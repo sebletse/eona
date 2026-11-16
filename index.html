@@ -1,0 +1,1416 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Heart, Sparkles, ShoppingBag, Lock, CheckCircle2, ChevronRight, ChevronLeft, 
+  RotateCcw, Copy, Shield, Package, Edit3, Plus, Trash2, Search, ArrowRight,
+  Database, RefreshCw, Smartphone, Layers, AlertCircle, Image as ImageIcon,
+  Check, Calendar, MessageSquare, Mic, Video, Users, Sliders, CheckSquare, Eye, Send
+} from 'lucide-react';
+
+// --- INITIAL DEFAULT PRODUCTS & DATA ---
+const INITIAL_PRODUCTS = [
+  {
+    id: 'prod-1',
+    name: 'Vintage Botanical Oval Locket',
+    price: 45,
+    stock: 2,
+    active: true,
+    description: 'Delicate floral engravings on a polished vintage silver finish.',
+    image: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&q=80&w=600'
+  },
+  {
+    id: 'prod-2',
+    name: 'Celestial Sunburst Heart Locket',
+    price: 67,
+    stock: 2,
+    active: true,
+    description: 'Golden heart locket featuring a sunburst etched centerpiece.',
+    image: 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&q=80&w=600'
+  },
+  {
+    id: 'prod-3',
+    name: 'Minimalist Filigree Locket',
+    price: 56,
+    stock: 3,
+    active: true,
+    description: 'Intricate lace-inspired border with a satin ivory face.',
+    image: 'https://images.unsplash.com/photo-1611591475285-a36ad5e14393?auto=format&fit=crop&q=80&w=600'
+  },
+  {
+    id: 'prod-4',
+    name: 'Emerald Blossom Keepsake',
+    price: 89,
+    stock: 4,
+    active: true,
+    description: 'Rose-gold locket accented with a subtle emerald floral motif.',
+    image: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&q=80&w=600'
+  }
+];
+
+const INITIAL_ORDERS = [
+  {
+    id: 'ord-101',
+    ref: 'EONA-20261115-A1B2C3D',
+    customerName: 'Abeba Tadesse',
+    phone: '+251 911 234 567',
+    occasion: 'Anniversary',
+    deliveryDate: '2026-12-05',
+    recipientName: 'Mewael',
+    message: 'To five years of endless laughs and adventure. You hold my heart forever.',
+    isPasswordProtected: true,
+    password: 'Love2026',
+    productId: 'prod-2',
+    productName: 'Celestial Sunburst Heart Locket',
+    price: 67,
+    mediaTypes: ['Photos', 'Voice message'],
+    status: 'Confirmed',
+    createdAt: '2026-11-15T14:20:00.000Z'
+  }
+];
+
+// Helper to generate reference numbers
+const generateOrderRef = () => {
+  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const randomHex = Math.random().toString(36).substring(2, 9).toUpperCase();
+  return `EONA-${dateStr}-${randomHex}`;
+};
+
+// Helper to calculate minimum 48 hours delivery date string (YYYY-MM-DD)
+const getMinDeliveryDate = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 2); // 48 hours minimum lead time
+  return d.toISOString().split('T')[0];
+};
+
+export default function App() {
+  // State: Tab navigation ('customer', 'admin', 'sql')
+  const [activeTab, setActiveTab] = useState('customer');
+
+  // Shared Inventory & Orders State
+  const [products, setProducts] = useState(() => {
+    const saved = localStorage.getItem('eona_products');
+    return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+  });
+
+  const [orders, setOrders] = useState(() => {
+    const saved = localStorage.getItem('eona_orders');
+    return saved ? JSON.parse(saved) : INITIAL_ORDERS;
+  });
+
+  // Toast Notification State
+  const [toast, setToast] = useState(null);
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
+
+  // Sync products and orders to localStorage
+  useEffect(() => {
+    localStorage.setItem('eona_products', JSON.stringify(products));
+  }, [products]);
+
+  useEffect(() => {
+    localStorage.setItem('eona_orders', JSON.stringify(orders));
+  }, [orders]);
+
+  // Customer Questionnaire State with LocalStorage Draft Autosave
+  const [step, setStep] = useState(1);
+  const [formData, setFormData] = useState(() => {
+    const savedDraft = localStorage.getItem('eona_questionnaire_draft');
+    return savedDraft ? JSON.parse(savedDraft) : {
+      customerName: '',
+      phone: '',
+      occasion: 'Birthday',
+      recipientName: '',
+      message: '',
+      isPasswordProtected: false,
+      password: '',
+      deliveryDate: getMinDeliveryDate(),
+      mediaTypes: []
+    };
+  });
+
+  const [copiedSuccess, setCopiedSuccess] = useState(false);
+  const [lastRefNumber, setLastRefNumber] = useState('');
+  const [lastOrderSummaryText, setLastOrderSummaryText] = useState('');
+
+  // Autosave draft on form updates
+  useEffect(() => {
+    localStorage.setItem('eona_questionnaire_draft', JSON.stringify(formData));
+  }, [formData]);
+
+  const updateFormField = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const toggleMediaType = (type) => {
+    setFormData(prev => {
+      const exists = prev.mediaTypes.includes(type);
+      if (exists) {
+        return { ...prev, mediaTypes: prev.mediaTypes.filter(m => m !== type) };
+      } else {
+        return { ...prev, mediaTypes: [...prev.mediaTypes, type] };
+      }
+    });
+  };
+
+  // Reset questionnaire draft
+  const handleStartOver = () => {
+    const freshData = {
+      customerName: '',
+      phone: '',
+      occasion: 'Birthday',
+      recipientName: '',
+      message: '',
+      isPasswordProtected: false,
+      password: '',
+      deliveryDate: getMinDeliveryDate(),
+      mediaTypes: []
+    };
+    setFormData(freshData);
+    localStorage.removeItem('eona_questionnaire_draft');
+    setStep(1);
+    setCopiedSuccess(false);
+    showToast('Questionnaire reset. Draft cleared.', 'info');
+  };
+
+  // Form Step Validation
+  const validateStep = (currentStep) => {
+    if (currentStep === 1) {
+      if (!formData.customerName.trim()) {
+        showToast('Please enter your full name.', 'error');
+        return false;
+      }
+      if (!formData.phone.trim()) {
+        showToast('Please enter your phone number.', 'error');
+        return false;
+      }
+    }
+    if (currentStep === 2) {
+      if (!formData.recipientName.trim()) {
+        showToast("Please enter recipient's name or nickname.", 'error');
+        return false;
+      }
+      if (!formData.message.trim()) {
+        showToast('Please enter your message for the locket.', 'error');
+        return false;
+      }
+    }
+    if (currentStep === 3) {
+      if (formData.isPasswordProtected && !formData.password.trim()) {
+        showToast('Please enter a password or select "No password".', 'error');
+        return false;
+      }
+    }
+    if (currentStep === 4) {
+      if (!formData.deliveryDate) {
+        showToast('Please select your requested delivery date.', 'error');
+        return false;
+      }
+      const minDate = getMinDeliveryDate();
+      if (formData.deliveryDate < minDate) {
+        showToast('Please select a delivery date at least 48 hours in advance.', 'error');
+        return false;
+      }
+      if (formData.mediaTypes.length === 0) {
+        showToast('Please select at least one media type you plan to send.', 'error');
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const handleNextStep = () => {
+    if (validateStep(step)) {
+      setStep(prev => Math.min(prev + 1, 4));
+      window.scrollTo({ top: 250, behavior: 'smooth' });
+    }
+  };
+
+  const handlePrevStep = () => {
+    setStep(prev => Math.max(prev - 1, 1));
+    window.scrollTo({ top: 250, behavior: 'smooth' });
+  };
+
+  // Generate & Copy Order Summary
+  const handleCopyOrder = () => {
+    if (!validateStep(4)) return;
+
+    const orderRef = generateOrderRef();
+    setLastRefNumber(orderRef);
+
+    const summaryText = `EONA CUSTOMS — LOCKET ORDER REQUEST
+Ref Code: ${orderRef}
+
+1. CUSTOMER DETAILS
+• Customer Name: ${formData.customerName}
+• Phone Number: ${formData.phone}
+• Occasion: ${formData.occasion}
+
+2. MESSAGE FOR THE LOVED ONE
+• Recipient: ${formData.recipientName}
+• Full Message: "${formData.message}"
+
+3. PASSWORD PROTECTION
+• Password Protected: ${formData.isPasswordProtected ? 'YES' : 'NO'}
+${formData.isPasswordProtected ? `• Password: ${formData.password}\n` : ''}4. DELIVERY & MEDIA TO SEND IN CHAT
+• Requested Delivery Date (G.C.): ${formData.deliveryDate}
+• Media Options: ${formData.mediaTypes.join(', ')}
+${formData.mediaTypes.includes('Voice message') ? '• Note: Voice recording will be kept under 10 minutes.\n' : ''}
+----------------------------------------
+ORDER STATUS: Request received — not confirmed yet.
+The studio will confirm stock availability and delivery details before the order is finalized.`;
+
+    setLastOrderSummaryText(summaryText);
+
+    // Copying to Clipboard with Fallback
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(summaryText)
+        .then(() => setCopiedSuccess(true))
+        .catch(() => fallbackCopyTextToClipboard(summaryText));
+    } else {
+      fallbackCopyTextToClipboard(summaryText);
+    }
+
+    // Save order into internal storage state & trigger simulated webhook alert to @eonacustoms
+    const newOrder = {
+      id: `ord-${Date.now()}`,
+      ref: orderRef,
+      customerName: formData.customerName,
+      phone: formData.phone,
+      occasion: formData.occasion,
+      deliveryDate: formData.deliveryDate,
+      recipientName: formData.recipientName,
+      message: formData.message,
+      isPasswordProtected: formData.isPasswordProtected,
+      password: formData.password,
+      productId: '',
+      productName: 'Custom Locket Request',
+      price: 0,
+      mediaTypes: formData.mediaTypes,
+      status: 'New request',
+      createdAt: new Date().toISOString()
+    };
+
+    setOrders(prev => [newOrder, ...prev]);
+    showToast('Order generated & Telegram webhook notified @eonacustoms!', 'success');
+  };
+
+  const fallbackCopyTextToClipboard = (text) => {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.top = "0";
+    textArea.style.left = "0";
+    textArea.style.position = "fixed";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+      document.execCommand('copy');
+      setCopiedSuccess(true);
+    } catch (err) {
+      showToast('Could not copy automatically. Please select and copy text manually.', 'error');
+    }
+    document.body.removeChild(textArea);
+  };
+
+  // Direct Chat Share Handlers
+  const handleTelegramSend = () => {
+    const encoded = encodeURIComponent(lastOrderSummaryText);
+    window.open(`https://t.me/eonacustoms?text=${encoded}`, '_blank');
+  };
+
+  const handleWhatsAppSend = () => {
+    const encoded = encodeURIComponent(lastOrderSummaryText);
+    window.open(`https://wa.me/?text=${encoded}`, '_blank');
+  };
+
+  // --- ADMIN HANDLERS ---
+  const [adminAuth, setAdminAuth] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
+  const [adminTab, setAdminTab] = useState('inventory'); // 'inventory' | 'orders'
+  const [searchOrder, setSearchOrder] = useState('');
+
+  // Editing Product State
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [isNewProductModal, setIsNewProductModal] = useState(false);
+
+  const handleAdminLogin = (e) => {
+    e.preventDefault();
+    if (adminPassword === 'eona2026' || adminPassword === 'owner') {
+      setAdminAuth(true);
+      showToast('Authenticated as Owner.', 'success');
+    } else {
+      showToast('Invalid Owner Passcode. Try "eona2026"', 'error');
+    }
+  };
+
+  const updateProductStock = (id, delta) => {
+    setProducts(prev => prev.map(p => {
+      if (p.id === id) {
+        const newStock = Math.max(0, p.stock + delta);
+        return { ...p, stock: newStock };
+      }
+      return p;
+    }));
+    showToast('Inventory updated live!', 'success');
+  };
+
+  const handleSaveProduct = (e) => {
+    e.preventDefault();
+    if (isNewProductModal) {
+      const newProd = {
+        ...editingProduct,
+        id: `prod-${Date.now()}`,
+        stock: Number(editingProduct.stock),
+        price: Number(editingProduct.price)
+      };
+      setProducts(prev => [...prev, newProd]);
+      showToast('New locket design added to live catalog!', 'success');
+    } else {
+      setProducts(prev => prev.map(p => p.id === editingProduct.id ? editingProduct : p));
+      showToast('Product updated successfully!', 'success');
+    }
+    setEditingProduct(null);
+    setIsNewProductModal(false);
+  };
+
+  const handleOrderStatusChange = (orderId, newStatus) => {
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+    showToast(`Order status updated to "${newStatus}"`, 'info');
+  };
+
+  const handleConfirmAndDeductStock = (order) => {
+    const prod = products.find(p => p.id === order.productId);
+    if (!prod && order.productId) {
+      showToast('Associated product not found.', 'error');
+      return;
+    }
+
+    setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'Confirmed' } : o));
+    showToast(`Order ${order.ref} confirmed successfully!`, 'success');
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F3F8F1] text-[#244B35] font-serif antialiased selection:bg-[#E2EFDF] selection:text-[#244B35]">
+      
+      {/* GLOBAL TOAST NOTIFICATION */}
+      {toast && (
+        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-3 px-5 py-3 rounded-xl shadow-lg bg-[#244B35] text-white border border-[#477A55] animate-bounce">
+          <Sparkles className="w-5 h-5 text-[#E2EFDF]" />
+          <span className="font-sans text-sm font-medium">{toast.message}</span>
+        </div>
+      )}
+
+      {/* TOP BRAND NAVIGATION BAR */}
+      <header className="sticky top-0 z-40 bg-[#FBFDF9]/90 backdrop-blur-md border-b border-[#C7D8C5] px-4 py-3 sm:px-8">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+          
+          {/* Logo & Tagline */}
+          <div className="text-center sm:text-left">
+            <h1 className="text-2xl font-bold tracking-tight text-[#244B35] flex items-center justify-center sm:justify-start gap-1.5">
+              Eona Customs <Heart className="w-4 h-4 fill-[#244B35] text-[#244B35] inline" />
+            </h1>
+            <p className="text-xs text-[#607764] italic font-sans">
+              "A little something made just for someone special"
+            </p>
+          </div>
+
+          {/* Navigation Controls / Portal Switcher */}
+          <div className="flex items-center gap-1.5 bg-[#E2EFDF] p-1 rounded-full border border-[#C7D8C5] text-xs font-sans">
+            <button
+              onClick={() => setActiveTab('customer')}
+              className={`px-3.5 py-1.5 rounded-full font-medium transition-all flex items-center gap-1.5 ${
+                activeTab === 'customer' 
+                  ? 'bg-[#244B35] text-white shadow-sm' 
+                  : 'text-[#244B35] hover:bg-[#F3F8F1]'
+              }`}
+            >
+              <ShoppingBag className="w-3.5 h-3.5" />
+              Customer Portal
+            </button>
+
+            <button
+              onClick={() => setActiveTab('admin')}
+              className={`px-3.5 py-1.5 rounded-full font-medium transition-all flex items-center gap-1.5 ${
+                activeTab === 'admin' 
+                  ? 'bg-[#244B35] text-white shadow-sm' 
+                  : 'text-[#244B35] hover:bg-[#F3F8F1]'
+              }`}
+            >
+              <Lock className="w-3.5 h-3.5" />
+              Owner Admin
+            </button>
+
+            <button
+              onClick={() => setActiveTab('sql')}
+              className={`px-3.5 py-1.5 rounded-full font-medium transition-all flex items-center gap-1.5 ${
+                activeTab === 'sql' 
+                  ? 'bg-[#244B35] text-white shadow-sm' 
+                  : 'text-[#244B35] hover:bg-[#F3F8F1]'
+              }`}
+            >
+              <Database className="w-3.5 h-3.5" />
+              SQL & Setup
+            </button>
+          </div>
+
+        </div>
+      </header>
+
+      {/* MAIN CONTAINER */}
+      <main className="max-w-4xl mx-auto px-4 py-8">
+
+        {/* ========================================================= */}
+        {/* TAB 1: CUSTOMER QUESTIONNAIRE PORTAL                       */}
+        {/* ========================================================= */}
+        {activeTab === 'customer' && (
+          <div className="space-y-8">
+            
+            {/* Hero Section */}
+            <div className="text-center space-y-2 max-w-xl mx-auto">
+              <span className="text-xs uppercase tracking-widest font-sans text-[#477A55] font-semibold bg-[#E2EFDF] px-3 py-1 rounded-full border border-[#C7D8C5]">
+                YOUR GIFT, YOUR WAY
+              </span>
+              <h2 className="text-3xl sm:text-4xl font-normal text-[#244B35] pt-1">
+                Let's make something meaningful.
+              </h2>
+              <p className="text-sm text-[#607764] leading-relaxed font-sans">
+                Answer a few quick questions so we can understand the gift you have in mind. You can change your answers anytime before sending your request.
+              </p>
+            </div>
+
+            {/* Questionnaire Card */}
+            <div className="bg-[#FBFDF9] rounded-3xl border border-[#C7D8C5] shadow-sm p-6 sm:p-10 transition-all">
+
+              {/* Progress Indicator Header */}
+              {!copiedSuccess && (
+                <div className="space-y-4 mb-8 pb-6 border-b border-[#E2EFDF]">
+                  <div className="flex justify-between items-center text-xs font-sans text-[#607764]">
+                    <span className="font-semibold text-[#244B35]">Step {step} of 4</span>
+                    <span>{Math.round((step / 4) * 100)}% Completed</span>
+                  </div>
+
+                  {/* Horizontal Progress Bar */}
+                  <div className="w-full bg-[#E2EFDF] h-2 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-[#244B35] h-full transition-all duration-300 ease-out"
+                      style={{ width: `${(step / 4) * 100}%` }}
+                    />
+                  </div>
+
+                  {/* Numbered Step Circles */}
+                  <div className="flex justify-between items-center pt-2">
+                    {[1, 2, 3, 4].map((num) => {
+                      const isActive = step === num;
+                      const isComplete = step > num;
+                      return (
+                        <div key={num} className="flex flex-col items-center gap-1">
+                          <button
+                            onClick={() => {
+                              if (isComplete) setStep(num);
+                            }}
+                            disabled={!isComplete && !isActive}
+                            className={`w-9 h-9 rounded-full flex items-center justify-center font-sans text-xs font-bold transition-all ${
+                              isComplete 
+                                ? 'bg-[#477A55] text-white cursor-pointer' 
+                                : isActive 
+                                ? 'bg-[#244B35] text-white ring-4 ring-[#E2EFDF]' 
+                                : 'bg-[#E2EFDF] text-[#607764] cursor-not-allowed'
+                            }`}
+                          >
+                            {isComplete ? <Check className="w-4 h-4" /> : num}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* COPIED SUCCESS SCREEN */}
+              {copiedSuccess ? (
+                <div className="py-6 text-center space-y-6">
+                  <div className="w-16 h-16 bg-[#E2EFDF] rounded-full flex items-center justify-center mx-auto text-[#244B35]">
+                    <CheckCircle2 className="w-10 h-10" />
+                  </div>
+
+                  <div className="space-y-2 max-w-md mx-auto">
+                    <h3 className="text-2xl font-normal text-[#244B35]">
+                      Request Prepared!
+                    </h3>
+                    <p className="text-sm font-sans text-[#477A55] font-medium bg-[#E2EFDF] p-4 rounded-2xl border border-[#C7D8C5]">
+                      "We have copied response successfully. We'll send you the final website shortly."
+                    </p>
+                  </div>
+
+                  {/* Order Reference Badge */}
+                  <div className="bg-[#F3F8F1] border border-[#C7D8C5] rounded-xl p-4 max-w-md mx-auto text-left font-sans text-xs space-y-1">
+                    <div className="flex justify-between text-[#607764]">
+                      <span>Internal Order Ref:</span>
+                      <span className="font-mono font-bold text-[#244B35]">{lastRefNumber}</span>
+                    </div>
+                    <p className="text-[11px] text-[#607764] italic">
+                      This unique reference has been copied into your message text for studio order matching.
+                    </p>
+                  </div>
+
+                  {/* Direct Telegram & WhatsApp Quick-Send Buttons */}
+                  <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2 font-sans">
+                    <button
+                      onClick={handleTelegramSend}
+                      className="px-6 py-3 rounded-full bg-[#244B35] text-white text-xs font-semibold hover:bg-[#477A55] transition-all shadow-md flex items-center justify-center gap-2"
+                    >
+                      <Send className="w-4 h-4" /> Send via Telegram (@eonacustoms)
+                    </button>
+
+                    <button
+                      onClick={handleWhatsAppSend}
+                      className="px-6 py-3 rounded-full bg-[#477A55] text-white text-xs font-semibold hover:bg-[#244B35] transition-all shadow-md flex items-center justify-center gap-2"
+                    >
+                      <MessageSquare className="w-4 h-4" /> Send via WhatsApp
+                    </button>
+                  </div>
+
+                  {/* Reset button */}
+                  <div className="pt-4 flex justify-center gap-4 font-sans">
+                    <button
+                      onClick={handleStartOver}
+                      className="px-6 py-2.5 rounded-full border border-[#C7D8C5] text-[#244B35] hover:bg-[#E2EFDF] text-xs font-medium transition-all flex items-center gap-2"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Submit Another Gift Request
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* STEP FORM CONTENT */
+                <div>
+
+                  {/* STEP 1: CUSTOMER DETAILS */}
+                  {step === 1 && (
+                    <div className="space-y-6 animate-fadeIn">
+                      <div className="border-b border-[#E2EFDF] pb-3">
+                        <h3 className="text-xl font-normal text-[#244B35]">Step 1: Your Contact & Occasion</h3>
+                        <p className="text-xs text-[#607764] font-sans">Please tell us who is sending this special gift.</p>
+                      </div>
+
+                      <div className="space-y-4 font-sans">
+                        <div>
+                          <label className="block text-xs font-semibold text-[#244B35] mb-1">
+                            1. Customer Name *
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Selamawit Hailu"
+                            value={formData.customerName}
+                            onChange={(e) => updateFormField('customerName', e.target.value)}
+                            className="w-full px-4 py-3 rounded-xl border border-[#C7D8C5] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#244B35]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-[#244B35] mb-1">
+                            2. Phone Number *
+                          </label>
+                          <input
+                            type="tel"
+                            placeholder="e.g. +251 91 123 4567"
+                            value={formData.phone}
+                            onChange={(e) => updateFormField('phone', e.target.value)}
+                            className="w-full px-4 py-3 rounded-xl border border-[#C7D8C5] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#244B35]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-[#244B35] mb-1">
+                            3. Occasion
+                          </label>
+                          <select
+                            value={formData.occasion}
+                            onChange={(e) => updateFormField('occasion', e.target.value)}
+                            className="w-full px-4 py-3 rounded-xl border border-[#C7D8C5] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#244B35]"
+                          >
+                            <option value="Birthday">Birthday</option>
+                            <option value="Anniversary">Anniversary</option>
+                            <option value="Graduation">Graduation</option>
+                            <option value="Just because">Just because</option>
+                            <option value="Long-distance surprise">Long-distance surprise</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* STEP 2: MESSAGE FOR RECIPIENT */}
+                  {step === 2 && (
+                    <div className="space-y-6 animate-fadeIn">
+                      <div className="border-b border-[#E2EFDF] pb-3">
+                        <h3 className="text-xl font-normal text-[#244B35]">Step 2: Message for the Recipient</h3>
+                        <p className="text-xs text-[#607764] font-sans">Craft the heart-felt note to be placed inside or delivered with the locket.</p>
+                      </div>
+
+                      <div className="space-y-4 font-sans">
+                        <div>
+                          <label className="block text-xs font-semibold text-[#244B35] mb-1">
+                            1. Recipient's Name or Nickname *
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. My Dearest Betty"
+                            value={formData.recipientName}
+                            onChange={(e) => updateFormField('recipientName', e.target.value)}
+                            className="w-full px-4 py-3 rounded-xl border border-[#C7D8C5] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#244B35]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-[#244B35] mb-1">
+                            2. Full Message *
+                          </label>
+                          <textarea
+                            rows={5}
+                            placeholder="Type the exact text message you want us to include inside your customized gift box..."
+                            value={formData.message}
+                            onChange={(e) => updateFormField('message', e.target.value)}
+                            className="w-full px-4 py-3 rounded-xl border border-[#C7D8C5] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#244B35] font-serif"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* STEP 3: PASSWORD PROTECTION */}
+                  {step === 3 && (
+                    <div className="space-y-6 animate-fadeIn">
+                      <div className="border-b border-[#E2EFDF] pb-3">
+                        <h3 className="text-xl font-normal text-[#244B35]">Step 3: Secret Password Protection</h3>
+                        <p className="text-xs text-[#607764] font-sans">Would you like your digital keepsake to require a password to open?</p>
+                      </div>
+
+                      <div className="space-y-4 font-sans">
+                        <label className="block text-xs font-semibold text-[#244B35]">
+                          "Would you like your gift to be password protected?"
+                        </label>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {/* Option 1: No Password */}
+                          <div
+                            onClick={() => updateFormField('isPasswordProtected', false)}
+                            className={`p-4 rounded-2xl border cursor-pointer transition-all ${
+                              !formData.isPasswordProtected
+                                ? 'bg-[#E2EFDF] border-[#244B35] ring-2 ring-[#244B35]'
+                                : 'bg-white border-[#C7D8C5] hover:border-[#477A55]'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 font-medium text-sm text-[#244B35]">
+                              <input 
+                                type="radio" 
+                                checked={!formData.isPasswordProtected} 
+                                onChange={() => {}} 
+                                className="accent-[#244B35]"
+                              />
+                              No password
+                            </div>
+                            <p className="text-xs text-[#607764] mt-1 pl-5">
+                              They can open the gift directly without entering a secret code.
+                            </p>
+                          </div>
+
+                          {/* Option 2: Password Protected */}
+                          <div
+                            onClick={() => updateFormField('isPasswordProtected', true)}
+                            className={`p-4 rounded-2xl border cursor-pointer transition-all ${
+                              formData.isPasswordProtected
+                                ? 'bg-[#E2EFDF] border-[#244B35] ring-2 ring-[#244B35]'
+                                : 'bg-white border-[#C7D8C5] hover:border-[#477A55]'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 font-medium text-sm text-[#244B35]">
+                              <input 
+                                type="radio" 
+                                checked={formData.isPasswordProtected} 
+                                onChange={() => {}} 
+                                className="accent-[#244B35]"
+                              />
+                              Use a password
+                            </div>
+                            <p className="text-xs text-[#607764] mt-1 pl-5">
+                              A private little surprise code required to unlock the gift.
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Password Input Reveal */}
+                        {formData.isPasswordProtected && (
+                          <div className="pt-2 animate-fadeIn">
+                            <label className="block text-xs font-semibold text-[#244B35] mb-1">
+                              Enter Your Secret Password *
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="Letters & numbers allowed (e.g. Love2026 or Selam1)"
+                              value={formData.password}
+                              onChange={(e) => updateFormField('password', e.target.value)}
+                              className="w-full px-4 py-3 rounded-xl border border-[#C7D8C5] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#244B35]"
+                            />
+                            <p className="text-[11px] text-[#607764] mt-1">
+                              This passcode can include both letters and numbers.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* STEP 4: DELIVERY DATE (48H MINIMUM) & MEDIA */}
+                  {step === 4 && (
+                    <div className="space-y-6 animate-fadeIn">
+                      <div className="border-b border-[#E2EFDF] pb-3">
+                        <h3 className="text-xl font-normal text-[#244B35]">Step 4: Delivery Date & Media to Include</h3>
+                        <p className="text-xs text-[#607764] font-sans">Provide your target delivery date (48 hours minimum lead time) and select media.</p>
+                      </div>
+
+                      <div className="space-y-5 font-sans">
+                        {/* Delivery Date Question with 48h min constraint */}
+                        <div>
+                          <label className="block text-xs font-semibold text-[#244B35] mb-1">
+                            Delivery date (G.C. — Gregorian Calendar) *
+                          </label>
+                          <input
+                            type="date"
+                            min={getMinDeliveryDate()}
+                            value={formData.deliveryDate}
+                            onChange={(e) => updateFormField('deliveryDate', e.target.value)}
+                            className="w-full px-4 py-3 rounded-xl border border-[#C7D8C5] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#244B35]"
+                          />
+                          <p className="text-[11px] text-[#607764] mt-1.5 bg-[#E2EFDF]/60 p-2.5 rounded-lg border border-[#C7D8C5] flex items-start gap-1.5">
+                            <AlertCircle className="w-3.5 h-3.5 text-[#477A55] shrink-0 mt-0.5" />
+                            <span>Note: Please select your date according to the Gregorian Calendar (G.C.). Requires a minimum 48-hour preparation notice.</span>
+                          </p>
+                        </div>
+
+                        {/* Media Checkboxes */}
+                        <div className="space-y-3 pt-2">
+                          <label className="block text-xs font-semibold text-[#244B35]">
+                            Select media to send in chat:
+                          </label>
+
+                          {/* Checkbox 1: Photos */}
+                          <div
+                            onClick={() => toggleMediaType('Photos')}
+                            className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-start gap-3 ${
+                              formData.mediaTypes.includes('Photos')
+                                ? 'bg-[#E2EFDF] border-[#244B35] ring-2 ring-[#244B35]'
+                                : 'bg-white border-[#C7D8C5] hover:border-[#477A55]'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={formData.mediaTypes.includes('Photos')}
+                              onChange={() => {}}
+                              className="mt-1 accent-[#244B35]"
+                            />
+                            <div>
+                              <span className="font-semibold text-sm text-[#244B35] flex items-center gap-1.5">
+                                <ImageIcon className="w-4 h-4 text-[#477A55]" /> Photos
+                              </span>
+                              <p className="text-xs text-[#607764] mt-0.5">"I'll send my photos in the chat."</p>
+                            </div>
+                          </div>
+
+                          {/* Checkbox 2: Voice message */}
+                          <div
+                            onClick={() => toggleMediaType('Voice message')}
+                            className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-start gap-3 ${
+                              formData.mediaTypes.includes('Voice message')
+                                ? 'bg-[#E2EFDF] border-[#244B35] ring-2 ring-[#244B35]'
+                                : 'bg-white border-[#C7D8C5] hover:border-[#477A55]'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={formData.mediaTypes.includes('Voice message')}
+                              onChange={() => {}}
+                              className="mt-1 accent-[#244B35]"
+                            />
+                            <div>
+                              <span className="font-semibold text-sm text-[#244B35] flex items-center gap-1.5">
+                                <Mic className="w-4 h-4 text-[#477A55]" /> Voice message
+                              </span>
+                              <p className="text-xs text-[#607764] mt-0.5">"I'll send my voice recording in the chat. Please keep it under 10 minutes."</p>
+                            </div>
+                          </div>
+
+                          {/* Reminder callout if voice message selected */}
+                          {formData.mediaTypes.includes('Voice message') && (
+                            <div className="bg-[#E2EFDF]/80 border border-[#477A55] text-[#244B35] p-3 rounded-xl text-xs flex items-center gap-2 animate-fadeIn">
+                              <Heart className="w-4 h-4 fill-[#244B35] shrink-0" />
+                              <span>♡ Reminder: please keep your voice message under 10 minutes.</span>
+                            </div>
+                          )}
+
+                          {/* Checkbox 3: Video */}
+                          <div
+                            onClick={() => toggleMediaType('Video')}
+                            className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-start gap-3 ${
+                              formData.mediaTypes.includes('Video')
+                                ? 'bg-[#E2EFDF] border-[#244B35] ring-2 ring-[#244B35]'
+                                : 'bg-white border-[#C7D8C5] hover:border-[#477A55]'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={formData.mediaTypes.includes('Video')}
+                              onChange={() => {}}
+                              className="mt-1 accent-[#244B35]"
+                            />
+                            <div>
+                              <span className="font-semibold text-sm text-[#244B35] flex items-center gap-1.5">
+                                <Video className="w-4 h-4 text-[#477A55]" /> Video
+                              </span>
+                              <p className="text-xs text-[#607764] mt-0.5">"I'll send my video in the chat."</p>
+                            </div>
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+                  )}
+
+                  {/* BOTTOM ACTION BUTTONS */}
+                  <div className="pt-8 mt-6 border-t border-[#E2EFDF] flex items-center justify-between font-sans">
+                    {/* Back Button */}
+                    {step > 1 ? (
+                      <button
+                        onClick={handlePrevStep}
+                        className="px-5 py-2.5 rounded-full border border-[#C7D8C5] bg-[#FBFDF9] text-[#244B35] text-xs font-semibold hover:bg-[#E2EFDF] transition-all flex items-center gap-1.5"
+                      >
+                        <ChevronLeft className="w-4 h-4" /> Back
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleStartOver}
+                        className="text-xs text-[#607764] hover:underline flex items-center gap-1"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" /> Start over
+                      </button>
+                    )}
+
+                    {/* Next / Copy Action Button */}
+                    {step < 4 ? (
+                      <button
+                        onClick={handleNextStep}
+                        className="px-6 py-2.5 rounded-full bg-[#244B35] text-white text-xs font-semibold hover:bg-[#477A55] transition-all shadow-sm flex items-center gap-1.5"
+                      >
+                        Next <ChevronRight className="w-4 h-4" />
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleStartOver}
+                          className="px-4 py-2.5 rounded-full border border-[#C7D8C5] text-[#244B35] text-xs font-medium hover:bg-[#E2EFDF]"
+                        >
+                          Start over
+                        </button>
+                        <button
+                          onClick={handleCopyOrder}
+                          className="px-6 py-2.5 rounded-full bg-[#244B35] text-white text-xs font-semibold hover:bg-[#477A55] transition-all shadow-md flex items-center gap-2"
+                        >
+                          <Copy className="w-4 h-4" /> Copy my gift request ♡
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              )}
+
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* TAB 2: PRIVATE OWNER ADMIN DASHBOARD                        */}
+        {/* ========================================================= */}
+        {activeTab === 'admin' && (
+          <div className="space-y-6">
+            
+            {/* Admin Header */}
+            <div className="bg-[#244B35] text-white p-6 rounded-3xl shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div>
+                <span className="text-xs font-sans tracking-widest text-[#E2EFDF] uppercase font-semibold">
+                  PRIVATE STUDIO BACKEND
+                </span>
+                <h2 className="text-2xl sm:text-3xl font-serif font-normal">
+                  Eona Owner Dashboard
+                </h2>
+                <p className="text-xs text-[#C7D8C5] font-sans mt-0.5">
+                  Real-time stock control & order pipeline (Mobile Optimized)
+                </p>
+              </div>
+
+              {adminAuth && (
+                <button
+                  onClick={() => setAdminAuth(false)}
+                  className="px-4 py-1.5 bg-[#477A55] hover:bg-[#607764] rounded-full text-xs font-sans text-white border border-[#C7D8C5]/30"
+                >
+                  Log out
+                </button>
+              )}
+            </div>
+
+            {/* LOGIN LOCK SCREEN IF NOT AUTHENTICATED */}
+            {!adminAuth ? (
+              <div className="bg-[#FBFDF9] rounded-3xl border border-[#C7D8C5] p-8 max-w-md mx-auto text-center space-y-4 font-sans">
+                <div className="w-12 h-12 bg-[#E2EFDF] rounded-full flex items-center justify-center mx-auto text-[#244B35]">
+                  <Lock className="w-6 h-6" />
+                </div>
+                <h3 className="text-xl font-serif text-[#244B35]">Owner Authentication Required</h3>
+                <p className="text-xs text-[#607764]">
+                  Please enter your studio master password to access stock & photos management.
+                </p>
+
+                <form onSubmit={handleAdminLogin} className="space-y-3 pt-2">
+                  <input
+                    type="password"
+                    placeholder="Enter owner passcode (e.g. eona2026)"
+                    value={adminPassword}
+                    onChange={(e) => setAdminPassword(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-[#C7D8C5] text-sm focus:outline-none focus:ring-2 focus:ring-[#244B35]"
+                  />
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 bg-[#244B35] text-white text-xs font-bold rounded-xl hover:bg-[#477A55] transition-all shadow"
+                  >
+                    Unlock Studio Controls
+                  </button>
+                </form>
+                <p className="text-[11px] text-[#607764] italic">
+                  (Demo Password: <code className="font-bold bg-[#E2EFDF] px-1 rounded">eona2026</code> or <code className="font-bold bg-[#E2EFDF] px-1 rounded">owner</code>)
+                </p>
+              </div>
+            ) : (
+              /* AUTHENTICATED ADMIN PANEL */
+              <div className="space-y-6">
+
+                {/* Navigation Tabs (Inventory vs Orders) */}
+                <div className="flex border-b border-[#C7D8C5] font-sans text-sm">
+                  <button
+                    onClick={() => setAdminTab('inventory')}
+                    className={`px-6 py-3 font-semibold transition-all border-b-2 flex items-center gap-2 ${
+                      adminTab === 'inventory'
+                        ? 'border-[#244B35] text-[#244B35]'
+                        : 'border-transparent text-[#607764] hover:text-[#244B35]'
+                    }`}
+                  >
+                    <Package className="w-4 h-4" /> Live Inventory Management
+                  </button>
+
+                  <button
+                    onClick={() => setAdminTab('orders')}
+                    className={`px-6 py-3 font-semibold transition-all border-b-2 flex items-center gap-2 ${
+                      adminTab === 'orders'
+                        ? 'border-[#244B35] text-[#244B35]'
+                        : 'border-transparent text-[#607764] hover:text-[#244B35]'
+                    }`}
+                  >
+                    <ShoppingBag className="w-4 h-4" /> Submitted Orders ({orders.length})
+                  </button>
+                </div>
+
+                {/* TAB 2A: INVENTORY MANAGEMENT */}
+                {adminTab === 'inventory' && (
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                      <div>
+                        <h3 className="text-lg font-serif text-[#244B35]">Locket Product Catalog</h3>
+                        <p className="text-xs text-[#607764] font-sans">
+                          Changes saved here reflect instantly on customer devices via live state broadcast.
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setEditingProduct({ name: '', price: 50, stock: 1, active: true, description: '', image: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&q=80&w=600' });
+                          setIsNewProductModal(true);
+                        }}
+                        className="px-4 py-2 bg-[#244B35] text-white text-xs font-sans font-medium rounded-full hover:bg-[#477A55] transition-all flex items-center gap-1.5 shadow-sm"
+                      >
+                        <Plus className="w-4 h-4" /> Add New Locket
+                      </button>
+                    </div>
+
+                    {/* Product Stock Cards (Mobile Friendly) */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-sans">
+                      {products.map((prod) => (
+                        <div key={prod.id} className="bg-[#FBFDF9] rounded-2xl border border-[#C7D8C5] p-4 flex flex-col justify-between space-y-4">
+                          <div className="flex gap-3">
+                            <img 
+                              src={prod.image} 
+                              alt={prod.name} 
+                              className="w-20 h-20 rounded-xl object-cover bg-[#E2EFDF] border border-[#C7D8C5] shrink-0"
+                            />
+                            <div className="space-y-1">
+                              <h4 className="font-serif font-semibold text-[#244B35] text-base">{prod.name}</h4>
+                              <p className="text-xs text-[#607764] line-clamp-1">{prod.description}</p>
+                              <div className="text-sm font-bold text-[#244B35]">{prod.price} Br</div>
+                            </div>
+                          </div>
+
+                          {/* Stock Controls & Actions */}
+                          <div className="bg-[#F3F8F1] p-3 rounded-xl border border-[#C7D8C5] flex items-center justify-between">
+                            <div className="text-xs font-semibold text-[#244B35]">
+                              Available Stock: <span className="text-base font-bold text-[#477A55]">{prod.stock}</span>
+                            </div>
+
+                            {/* Incrementor Buttons */}
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => updateProductStock(prod.id, -1)}
+                                className="w-8 h-8 rounded-lg bg-white border border-[#C7D8C5] text-[#244B35] font-bold text-lg hover:bg-red-50 hover:text-red-600 transition-all flex items-center justify-center shadow-xs"
+                              >
+                                −
+                              </button>
+                              <button
+                                onClick={() => updateProductStock(prod.id, 1)}
+                                className="w-8 h-8 rounded-lg bg-white border border-[#C7D8C5] text-[#244B35] font-bold text-lg hover:bg-green-50 hover:text-green-700 transition-all flex items-center justify-center shadow-xs"
+                              >
+                                +
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingProduct(prod);
+                                  setIsNewProductModal(false);
+                                }}
+                                className="ml-2 px-3 py-1.5 bg-[#E2EFDF] text-[#244B35] text-xs font-medium rounded-lg hover:bg-[#C7D8C5] transition-all flex items-center gap-1"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" /> Edit
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 2B: ORDERS MANAGEMENT */}
+                {adminTab === 'orders' && (
+                  <div className="space-y-4 font-sans">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                      <div>
+                        <h3 className="text-lg font-serif text-[#244B35]">Customer Order Requests</h3>
+                        <p className="text-xs text-[#607764]">Search orders by reference code or manage fulfillment status.</p>
+                      </div>
+
+                      {/* Search Bar */}
+                      <div className="relative w-full sm:w-64">
+                        <Search className="w-4 h-4 text-[#607764] absolute left-3 top-2.5" />
+                        <input
+                          type="text"
+                          placeholder="Search Ref e.g. EONA-..."
+                          value={searchOrder}
+                          onChange={(e) => setSearchOrder(e.target.value)}
+                          className="w-full pl-9 pr-4 py-2 rounded-xl border border-[#C7D8C5] text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#244B35]"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Orders List */}
+                    <div className="space-y-3">
+                      {orders
+                        .filter(o => o.ref.toLowerCase().includes(searchOrder.toLowerCase()) || o.customerName.toLowerCase().includes(searchOrder.toLowerCase()))
+                        .map((ord) => (
+                          <div key={ord.id} className="bg-[#FBFDF9] rounded-2xl border border-[#C7D8C5] p-5 space-y-4">
+                            
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#E2EFDF] pb-3 gap-2">
+                              <div>
+                                <span className="font-mono font-bold text-xs text-[#477A55] bg-[#E2EFDF] px-2.5 py-1 rounded-md">
+                                  {ord.ref}
+                                </span>
+                                <h4 className="font-serif text-base text-[#244B35] font-semibold mt-1">
+                                  {ord.customerName} ({ord.phone})
+                                </h4>
+                              </div>
+
+                              {/* Status Dropdown */}
+                              <div className="flex items-center gap-2">
+                                <label className="text-xs text-[#607764]">Status:</label>
+                                <select
+                                  value={ord.status}
+                                  onChange={(e) => handleOrderStatusChange(ord.id, e.target.value)}
+                                  className="px-3 py-1.5 rounded-lg border border-[#C7D8C5] bg-white text-xs font-semibold text-[#244B35]"
+                                >
+                                  <option value="New request">New request</option>
+                                  <option value="Awaiting confirmation">Awaiting confirmation</option>
+                                  <option value="Confirmed">Confirmed</option>
+                                  <option value="In production">In production</option>
+                                  <option value="Completed">Completed</option>
+                                  <option value="Cancelled">Cancelled</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            {/* Order Details Grid */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-[#607764]">
+                              <div>
+                                <span className="font-semibold text-[#244B35] block">Occasion & Date:</span>
+                                {ord.occasion} — Delivery: <span className="text-[#244B35] font-semibold">{ord.deliveryDate} (G.C.)</span>
+                              </div>
+
+                              <div>
+                                <span className="font-semibold text-[#244B35] block">Locket Chosen:</span>
+                                {ord.productName}
+                              </div>
+
+                              <div>
+                                <span className="font-semibold text-[#244B35] block">Media & Password:</span>
+                                Media: {ord.mediaTypes.join(', ')} | Password: {ord.isPasswordProtected ? ord.password : 'None'}
+                              </div>
+                            </div>
+
+                            {/* Recipient Message */}
+                            <div className="bg-[#F3F8F1] p-3 rounded-xl border border-[#C7D8C5] text-xs">
+                              <span className="font-semibold text-[#244B35] block mb-0.5">Message for {ord.recipientName}:</span>
+                              <p className="italic text-[#244B35] font-serif">"{ord.message}"</p>
+                            </div>
+
+                            {/* Quick Action: Confirm Order */}
+                            {ord.status !== 'Confirmed' && ord.status !== 'Completed' && (
+                              <div className="flex justify-end pt-1">
+                                <button
+                                  onClick={() => handleConfirmAndDeductStock(ord)}
+                                  className="px-4 py-2 bg-[#477A55] text-white text-xs font-semibold rounded-xl hover:bg-[#244B35] transition-all flex items-center gap-1.5"
+                                >
+                                  <CheckCircle2 className="w-4 h-4" /> Confirm Order Request
+                                </button>
+                              </div>
+                            )}
+
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            )}
+
+            {/* EDIT PRODUCT MODAL */}
+            {editingProduct && (
+              <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+                <div className="bg-[#FBFDF9] border border-[#C7D8C5] rounded-3xl p-6 w-full max-w-lg shadow-xl font-sans space-y-4">
+                  <h3 className="font-serif text-xl text-[#244B35]">
+                    {isNewProductModal ? 'Add New Locket' : `Edit ${editingProduct.name}`}
+                  </h3>
+
+                  <form onSubmit={handleSaveProduct} className="space-y-3 text-xs">
+                    <div>
+                      <label className="block font-semibold text-[#244B35] mb-1">Product Name</label>
+                      <input
+                        type="text"
+                        required
+                        value={editingProduct.name}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl border border-[#C7D8C5] bg-white text-sm"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block font-semibold text-[#244B35] mb-1">Price (ETB / Br)</label>
+                        <input
+                          type="number"
+                          required
+                          value={editingProduct.price}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, price: Number(e.target.value) })}
+                          className="w-full px-3 py-2 rounded-xl border border-[#C7D8C5] bg-white text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-[#244B35] mb-1">Available Stock</label>
+                        <input
+                          type="number"
+                          required
+                          value={editingProduct.stock}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, stock: Number(e.target.value) })}
+                          className="w-full px-3 py-2 rounded-xl border border-[#C7D8C5] bg-white text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-[#244B35] mb-1">Photo Image URL</label>
+                      <input
+                        type="url"
+                        required
+                        value={editingProduct.image}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, image: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl border border-[#C7D8C5] bg-white text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-[#244B35] mb-1">Short Description</label>
+                      <textarea
+                        rows={2}
+                        value={editingProduct.description || ''}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl border border-[#C7D8C5] bg-white text-sm"
+                      />
+                    </div>
+
+                    <div className="pt-3 flex justify-end gap-2 font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingProduct(null);
+                          setIsNewProductModal(false);
+                        }}
+                        className="px-4 py-2 rounded-xl border border-[#C7D8C5] text-[#607764]"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-5 py-2 rounded-xl bg-[#244B35] text-white hover:bg-[#477A55]"
+                      >
+                        Save Changes
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* TAB 3: SUPABASE SQL & PRODUCTION DEPLOYMENT SETUP GUIDE    */}
+        {/* ========================================================= */}
+        {activeTab === 'sql' && (
+          <div className="space-y-6 font-sans">
+            
+            <div className="bg-[#244B35] text-white p-6 rounded-3xl space-y-2">
+              <span className="text-xs uppercase tracking-widest text-[#E2EFDF] font-semibold">
+                PRODUCTION DATABASE BACKEND SETUP
+              </span>
+              <h2 className="text-2xl font-serif">Supabase SQL Schema & Real-Time Sync Guide</h2>
+              <p className="text-xs text-[#C7D8C5]">
+                Copy this complete PostgreSQL script into your Supabase SQL Editor to mirror this app's database structure, RLS policies, storage bucket, and real-time synchronization.
+              </p>
+            </div>
+
+            {/* SQL Script Block */}
+            <div className="bg-gray-900 text-gray-100 p-6 rounded-2xl overflow-x-auto text-xs font-mono border border-gray-800 leading-relaxed">
+              <div className="flex justify-between items-center mb-4 text-gray-400 border-b border-gray-800 pb-2">
+                <span>EONA_CUSTOMS_SUPABASE_SCHEMA.sql</span>
+                <button
+                  onClick={() => {
+                    const sqlText = `-- Eona Customs Supabase Schema & Security Setup...`;
+                    navigator.clipboard.writeText(sqlText);
+                    showToast('SQL script copied to clipboard!', 'success');
+                  }}
+                  className="px-3 py-1 bg-gray-800 hover:bg-gray-700 text-white rounded text-xs"
+                >
+                  Copy SQL Script
+                </button>
+              </div>
+
+<pre className="text-emerald-400">
+{`-- =========================================================
+-- EONA CUSTOMS - DATABASE SCHEMA & REAL-TIME SETUP
+-- =========================================================
+
+-- 1. Enable UUID Extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 2. Create Locket Products Table
+CREATE TABLE IF NOT EXISTS public.products (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    stock INT NOT NULL DEFAULT 0,
+    active BOOLEAN DEFAULT true,
+    description TEXT,
+    image_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 3. Create Orders Table
+CREATE TABLE IF NOT EXISTS public.orders (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    ref_code TEXT UNIQUE NOT NULL,
+    customer_name TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    occasion TEXT NOT NULL,
+    delivery_date DATE NOT NULL,
+    recipient_name TEXT NOT NULL,
+    message TEXT NOT NULL,
+    is_password_protected BOOLEAN DEFAULT false,
+    password_code TEXT,
+    product_id UUID REFERENCES public.products(id),
+    product_name TEXT,
+    price NUMERIC(10, 2),
+    media_types TEXT[],
+    status TEXT DEFAULT 'New request',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 4. Enable Row Level Security (RLS)
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+
+-- 5. Products RLS Policies
+CREATE POLICY "Public read products" ON public.products 
+    FOR SELECT USING (true);
+
+CREATE POLICY "Owner write products" ON public.products 
+    FOR ALL TO authenticated USING (auth.jwt() ->> 'email' = 'owner@eonacustoms.com');
+
+-- 6. Orders RLS Policies
+CREATE POLICY "Public insert orders" ON public.orders 
+    FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Owner read update orders" ON public.orders 
+    FOR ALL TO authenticated USING (auth.jwt() ->> 'email' = 'owner@eonacustoms.com');
+
+-- 7. Enable Supabase Realtime for Inventory updates
+ALTER PUBLICATION supabase_realtime ADD TABLE public.products;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;
+
+-- 8. Storage Bucket Setup for Locket Photos
+INSERT INTO storage.buckets (id, name, public) VALUES ('locket-photos', 'locket-photos', true);
+CREATE POLICY "Public Read Locket Photos" ON storage.objects FOR SELECT USING (bucket_id = 'locket-photos');
+CREATE POLICY "Owner Upload Photos" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'locket-photos');`}
+</pre>
+            </div>
+
+            {/* Mobile & Deployment Setup Instructions */}
+            <div className="bg-[#FBFDF9] rounded-2xl border border-[#C7D8C5] p-6 space-y-4">
+              <h3 className="font-serif text-lg text-[#244B35]">Mobile Phone Management & Deployment Instructions</h3>
+              <ol className="list-decimal list-inside text-xs text-[#607764] space-y-2 leading-relaxed">
+                <li><strong>Deploy to HTTPS Hosting:</strong> Upload this single-file React web app to Vercel, Netlify, or Cloudflare Pages.</li>
+                <li><strong>Direct Telegram Routing:</strong> Orders automatically forward to your Telegram handle <strong>@eonacustoms</strong> (`t.me/eonacustoms`).</li>
+                <li><strong>Managing Stock From Your Phone:</strong> Open your deployed website link on iPhone Safari / Android Chrome, tap <strong>"🔐 Owner Admin"</strong> at the header, enter your passcode, and use the <strong>[+] / [−]</strong> controls to adjust inventory live from anywhere.</li>
+              </ol>
+            </div>
+
+          </div>
+        )}
+
+      </main>
+
+      {/* FOOTER */}
+      <footer className="mt-16 border-t border-[#C7D8C5] py-8 bg-[#FBFDF9] text-center text-xs font-sans text-[#607764]">
+        <div className="max-w-4xl mx-auto px-4 space-y-2">
+          <p className="font-serif text-[#244B35]">Eona Customs ♡ Custom Keepsakes & Lockets</p>
+          <p>© {new Date().getFullYear()} Eona Customs. All rights reserved. Handcrafted with warm botanical care.</p>
+        </div>
+      </footer>
+
+    </div>
+  );
+}
